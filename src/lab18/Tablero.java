@@ -1,100 +1,131 @@
 package lab18;
-public class Tablero {
-    private Soldado[][] tablero;
-    private int dimension;
+import java.util.*;
 
-    public Tablero(int dimension) {
-        this.dimension = dimension;
-        this.tablero = new Soldado[dimension][dimension];
-    }
-    public int getDimension() {
-        return dimension;
-    }
+class Tablero {
+    private String[][] tablero;
+    private Random random;
+    private Reino reinoNorte;
+    private Reino reinoSur;
 
-    public boolean colocarSoldado(Soldado soldado, int x, int y) {
-        if (esPosicionValida(x, y) && tablero[x][y] == null) {
-            tablero[x][y] = soldado;
-            return true;
-        }
-        return false;
+    public Tablero(Reino norte, Reino sur) {
+        this.reinoNorte = norte;
+        this.reinoSur = sur;
+        tablero = new String[10][10];
+        random = new Random();
+        colocarEjercitos(norte);
+        colocarEjercitos(sur);
     }
 
-    public boolean moverSoldado(int x, int y, int direccion) {
-        if (!esPosicionValida(x, y) || tablero[x][y] == null || !tablero[x][y].isVivo()) {
-            return false;
+    private void colocarEjercitos(Reino reino) {
+        for (Ejercito ejercito : reino.getEjercitos()) {
+            int x, y;
+            do {
+                x = random.nextInt(10);
+                y = random.nextInt(10);
+            } while (tablero[x][y] != null);
+            tablero[x][y] = ejercito.getId();
         }
-
-        int nuevoX = x, nuevoY = y;
-
-        switch (direccion) {
-            case 1: nuevoX -= 1; break; // Arriba
-            case 2: nuevoX += 1; break; // Abajo
-            case 3: nuevoY -= 1; break; // Izquierda
-            case 4: nuevoY += 1; break; // Derecha
-            default: return false;
-        }
-
-        if (!esPosicionValida(nuevoX, nuevoY)) {
-            return false;
-        }
-
-        Soldado soldadoActual = tablero[x][y];
-
-        // Si hay un enemigo en la posición de destino, se produce una batalla
-        if (tablero[nuevoX][nuevoY] != null && tablero[nuevoX][nuevoY].isVivo()) {
-            Soldado enemigo = tablero[nuevoX][nuevoY];
-            resolverBatalla(soldadoActual, enemigo);
-            // Si el enemigo muere, el soldado actual toma la posición
-            if (!enemigo.isVivo()) {
-                tablero[nuevoX][nuevoY] = soldadoActual;
-                tablero[x][y] = null;
-            }
-        } else {
-            // Movimiento normal si la posición está vacía
-            tablero[nuevoX][nuevoY] = soldadoActual;
-            tablero[x][y] = null;
-        }
-
-        return true;
-    }
-
-
-    private void resolverBatalla(Soldado soldado1, Soldado soldado2) {
-        System.out.println("Batalla entre " + soldado1.getNombre() + " y " + soldado2.getNombre() + " !");
-        if (soldado1.getVidaActual() > soldado2.getVidaActual()) {
-            System.out.println(soldado1.getNombre() + " gana la batalla");
-            soldado2.morir();
-        } else {
-            System.out.println(soldado2.getNombre() + " gana la batalla");
-            soldado1.morir();
-        }
-    }
-    
-    private boolean esPosicionValida(int x, int y) {
-        return x >= 0 && x < dimension && y >= 0 && y < dimension;
     }
 
     public void mostrarTablero() {
-        for (int i = 0; i < dimension; i++) {
-            for (int j = 0; j < dimension; j++) {
-                if (tablero[i][j] == null) {
-                    System.out.print("[   ] ");
-                } else {
-                    System.out.print("[" + tablero[i][j].toString() + "] ");
-                }
+        for (String[] fila : tablero) {
+            for (String celda : fila) {
+                System.out.print((celda != null ? celda : " . ") + " ");
             }
             System.out.println();
         }
     }
 
-    public boolean haySoldados() {
-        for (int i = 0; i < dimension; i++) {
-            for (int j = 0; j < dimension; j++) {
-                if (tablero[i][j] != null && tablero[i][j].isVivo()) {
-                    return true;
+    public void moverEjercito(Reino reino, Scanner scanner) {
+        System.out.println("Selecciona el ejercito que quieres mover:");
+        ArrayList<Ejercito> ejercitos = reino.getEjercitos();
+        for (int i = 0; i < ejercitos.size(); i++) {
+            System.out.println(i + ": " + ejercitos.get(i).getId());
+        }
+        int opcion = scanner.nextInt();
+        Ejercito ejercito = ejercitos.get(opcion);
+
+        System.out.println("Selecciona la direccion (1: arriba, 2: abajo, 3: izquierda, 4: derecha):");
+        int direccion = scanner.nextInt();
+
+        moverEjercitoEnTablero(ejercito, direccion, reino);
+    }
+
+    private void moverEjercitoEnTablero(Ejercito ejercito, int direccion, Reino reino) {
+        int[] posicion = encontrarPosicion(ejercito.getId());
+        if (posicion == null) return;
+
+        int x = posicion[0];
+        int y = posicion[1];
+        tablero[x][y] = null; // quitamos el ejercito de su posicion actual
+
+        switch (direccion) {
+            case 1 -> x = Math.max(x - 1, 0);
+            case 2 -> x = Math.min(x + 1, 9);
+            case 3 -> y = Math.max(y - 1, 0);
+            case 4 -> y = Math.min(y + 1, 9);
+        }
+
+        if (tablero[x][y] != null) {
+            String idEnPosicion = tablero[x][y];
+            Reino reinoEnemigo = (reino == reinoNorte) ? reinoSur : reinoNorte;
+            Ejercito enemigo = encontrarEjercito(idEnPosicion, reinoEnemigo);
+            if (enemigo != null) {
+                resolverBatalla(ejercito, enemigo, reino);
+            } else {
+                System.out.println("Movimiento invalido: no se puede mover a una posicion ocupada por un ejercito aliado.");
+                tablero[posicion[0]][posicion[1]] = ejercito.getId();
+                return;
+            }
+        } else {
+            tablero[x][y] = ejercito.getId();
+        }
+    }
+
+    private void resolverBatalla(Ejercito ejercito, Ejercito enemigo, Reino reino) {
+        System.out.println("Batalla entre " + ejercito.getId() + " y " + enemigo.getId());
+        double promedioEjercito = ejercito.getPromedioEstadisticas();
+        double promedioEnemigo = enemigo.getPromedioEstadisticas();
+
+        if (promedioEjercito > promedioEnemigo) {
+            System.out.println(ejercito.getId() + " gana la batalla contra " + enemigo.getId() +
+                               " porque tiene mayores estadisticas (" + promedioEjercito + " vs " + promedioEnemigo + ")");
+            int[] posicionEnemigo = encontrarPosicion(enemigo.getId());
+            if (posicionEnemigo != null) {
+                tablero[posicionEnemigo[0]][posicionEnemigo[1]] = null;
+            }
+            (reino == reinoNorte ? reinoSur : reinoNorte).removerEjercito(enemigo);
+        } else if (promedioEnemigo > promedioEjercito) {
+            System.out.println(enemigo.getId() + " gana la batalla contra " + ejercito.getId() +
+                               " porque tiene mayores estadisticas (" + promedioEnemigo + " vs " + promedioEjercito + ")");
+            int[] posicionEjercito = encontrarPosicion(ejercito.getId());
+            if (posicionEjercito != null) {
+                tablero[posicionEjercito[0]][posicionEjercito[1]] = null;
+            }
+            reino.removerEjercito(ejercito);
+        } else {
+            System.out.println("La batalla entre " + ejercito.getId() + " y " + enemigo.getId() + 
+                               " ha terminado en empate. Ambos ejercitos permanecen en el tablero.");
+        }
+    }
+
+    private int[] encontrarPosicion(String id) {
+        for (int i = 0; i < 10; i++) {
+            for (int j = 0; j < 10; j++) {
+                if (id.equals(tablero[i][j])) {
+                    return new int[]{i, j};
                 }
             }
         }
-        return false;
+        return null;
+    }
+
+    private Ejercito encontrarEjercito(String id, Reino reino) {
+        for (Ejercito ejercito : reino.getEjercitos()) {
+            if (ejercito.getId().equals(id)) {
+                return ejercito;
+            }
+        }
+        return null;
     }
 }
